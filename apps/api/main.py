@@ -29,7 +29,8 @@ PYTH_HERMES_URL = os.getenv("PYTH_HERMES_URL", "https://hermes.pyth.network")
 # Use a Studio/gateway endpoint + API key if required.
 AAVE_V3_BASE_SUBGRAPH = os.getenv(
     "AAVE_V3_BASE_SUBGRAPH",
-    # Aave V3 Base subgraph (Graph Studio gateway). Confirmed working URL provided by operator.
+    # Aave V3 Base subgraph (Graph Studio gateway). If this value already contains an API key in the path,
+    # e.g. https://gateway.thegraph.com/api/<KEY>/subgraphs/id/<ID>, no extra auth is needed.
     "https://gateway.thegraph.com/api/subgraphs/id/GQFbb95cE6d8mV989mL5figjaGaKCQB3xqYrr1bRyXqF",
 )
 THEGRAPH_API_KEY = os.getenv("THEGRAPH_API_KEY")
@@ -204,43 +205,90 @@ async def gql(query: str, variables: Dict[str, Any] | None = None) -> Dict[str, 
     return j["data"]
 
 
-@app.get("/aave/radar")
-async def aave_radar(threshold: float = 1.15, limit: int = 50):
-    # NOTE: Aave subgraph schemas vary by version/provider.
-    # We implement a safe, schema-light query for users + their healthFactor if present.
-    # If the endpoint is removed (hosted service sunset), you must set AAVE_V3_BASE_SUBGRAPH to a working gateway URL.
+def _bi(x: Any) -> int:
+    try:
+        return int(str(x))
+    except Exception:
+        return 0
 
+
+def _token_usd(amount_raw: int, decimals: int, price_usd_e8: int) -> float:
+    # price_usd_e8: USD price with 8 decimals (as observed in the subgraph).
+    if decimals < 0:
+        decimals = 0
+    return (amount_raw / (10 ** decimals)) * (price_usd_e8 / 1e8)
+
+
+async def _fetch_user_reserves(first_users: int = 200, reserves_per_user: int = 20):
     q = """
-    query Radar($first:Int!) {
+    query Radar($first:Int!, $rFirst:Int!) {
       users(first:$first, orderBy: borrowedReservesCount, orderDirection: desc) {
         id
         borrowedReservesCount
-        collateralBalanceUSD
-        borrowedBalanceUSD
-        healthFactor
+        reserves(first:$rFirst) {
+          id
+          usageAsCollateralEnabledOnUser
+          currentATokenBalance
+          currentTotalDebt
+          reserve {
+            symbol
+            decimals
+            price { priceInEth }
+          }
+        }
       }
     }
     """
+    data = await gql(q, {"first": first_users, "rFirst": reserves_per_user})
+    return data.get("users") or []
 
-    data = await gql(q, {"first": 500})
-    users = data.get("users") or []
+
+@app.get("/aave/radar")
+async def aave_radar(threshold: float = 1.15, limit: int = 50):
+    """Compute an approximate HF using subgraph reserves.
+
+    This subgraph variant doesn't expose user-level healthFactor/collateralBalanceUSD.
+    We approximate:
+      collateralUsd = sum(collateral-enabled aToken balances * reserveUSDPrice)
+      debtUsd       = sum(totalDebt * reserveUSDPrice)
+      healthFactor  = collateralUsd / max(debtUsd, eps)
+
+    It's not the exact Aave on-chain health factor (which uses liquidation thresholds),
+    but it's a useful liquidation *radar* for an MVP.
+    """
+
+    users = await _fetch_user_reserves(first_users=250, reserves_per_user=30)
 
     items = []
     for u in users:
-        hf = u.get("healthFactor")
-        if hf is None:
+        reserves = u.get("reserves") or []
+        col_usd = 0.0
+        debt_usd = 0.0
+
+        for r in reserves:
+            rv = r.get("reserve") or {}
+            decimals = int(rv.get("decimals") or 18)
+            price_e8 = _bi((rv.get("price") or {}).get("priceInEth"))
+
+            a_bal = _bi(r.get("currentATokenBalance"))
+            d_bal = _bi(r.get("currentTotalDebt"))
+
+            if r.get("usageAsCollateralEnabledOnUser") and a_bal > 0 and price_e8 > 0:
+                col_usd += _token_usd(a_bal, decimals, price_e8)
+            if d_bal > 0 and price_e8 > 0:
+                debt_usd += _token_usd(d_bal, decimals, price_e8)
+
+        if debt_usd <= 0:
             continue
-        try:
-            hf_f = float(hf)
-        except Exception:
+        hf = col_usd / max(debt_usd, 1e-9)
+        if hf >= threshold:
             continue
-        if hf_f >= threshold:
-            continue
+
         items.append({
             "wallet": u.get("id"),
-            "healthFactor": hf_f,
-            "collateralUsd": float(u.get("collateralBalanceUSD") or 0),
-            "debtUsd": float(u.get("borrowedBalanceUSD") or 0),
+            "healthFactor": float(hf),
+            "collateralUsd": float(col_usd),
+            "debtUsd": float(debt_usd),
         })
 
     items.sort(key=lambda x: x["healthFactor"])
@@ -252,31 +300,61 @@ async def aave_wallet(address: str):
     addr = address.lower()
 
     q = """
-    query Wallet($id: ID!) {
+    query Wallet($id: ID!, $rFirst:Int!) {
       user(id: $id) {
         id
-        collateralBalanceUSD
-        borrowedBalanceUSD
-        healthFactor
-        borrowedReservesCount
-        suppliedReservesCount
+        reserves(first:$rFirst) {
+          id
+          usageAsCollateralEnabledOnUser
+          currentATokenBalance
+          currentTotalDebt
+          reserve {
+            symbol
+            decimals
+            price { priceInEth }
+          }
+        }
       }
     }
     """
 
-    data = await gql(q, {"id": addr})
+    data = await gql(q, {"id": addr, "rFirst": 60})
     user = data.get("user")
     if not user:
         return {"ok": True, "address": addr, "found": False, "positions": [], "computed": {}, "ts": int(time.time())}
 
-    hf = float(user.get("healthFactor") or 0)
-    collateral = float(user.get("collateralBalanceUSD") or 0)
-    debt = float(user.get("borrowedBalanceUSD") or 0)
+    col_usd = 0.0
+    debt_usd = 0.0
+    positions = []
 
-    # Risk score per your formula: (hf - 1)/0.5 * 100 capped at 100, floor at 0
+    for r in (user.get("reserves") or []):
+        rv = r.get("reserve") or {}
+        sym = rv.get("symbol")
+        decimals = int(rv.get("decimals") or 18)
+        price_e8 = _bi((rv.get("price") or {}).get("priceInEth"))
+
+        a_bal = _bi(r.get("currentATokenBalance"))
+        d_bal = _bi(r.get("currentTotalDebt"))
+
+        a_usd = _token_usd(a_bal, decimals, price_e8) if (a_bal > 0 and price_e8 > 0) else 0.0
+        d_usd = _token_usd(d_bal, decimals, price_e8) if (d_bal > 0 and price_e8 > 0) else 0.0
+
+        if r.get("usageAsCollateralEnabledOnUser"):
+            col_usd += a_usd
+        debt_usd += d_usd
+
+        if (a_bal > 0 or d_bal > 0) and sym:
+            positions.append({
+                "symbol": sym,
+                "collateralEnabled": bool(r.get("usageAsCollateralEnabledOnUser")),
+                "aTokenUsd": a_usd,
+                "debtUsd": d_usd,
+            })
+
+    hf = (col_usd / max(debt_usd, 1e-9)) if debt_usd > 0 else 999.0
+
     score = max(0.0, min(100.0, ((hf - 1.0) / 0.5) * 100.0))
 
-    # Labels first (MVP)
     if hf < 1.05:
         ttl = "< 2 HRS"
     elif hf < 1.15:
@@ -290,12 +368,12 @@ async def aave_wallet(address: str):
         "ok": True,
         "address": addr,
         "found": True,
-        "positions": [],
+        "positions": positions,
         "computed": {
-            "healthFactor": hf,
-            "riskScore": score,
-            "collateralUsd": collateral,
-            "debtUsd": debt,
+            "healthFactor": float(hf),
+            "riskScore": float(score),
+            "collateralUsd": float(col_usd),
+            "debtUsd": float(debt_usd),
             "timeToLiqLabel": ttl,
         },
         "ts": int(time.time()),
