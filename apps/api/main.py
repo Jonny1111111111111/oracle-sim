@@ -219,6 +219,21 @@ def _token_usd(amount_raw: int, decimals: int, price_usd_e8: int) -> float:
     return (amount_raw / (10 ** decimals)) * (price_usd_e8 / 1e8)
 
 
+def _lt_factor(lt_raw: Any) -> float:
+    """Liquidation threshold as a factor (e.g. 0.825 for 82.5%).
+
+    Subgraph exposes reserveLiquidationThreshold as BigInt.
+    In Aave it's typically in bps (0..10000).
+    """
+    v = _bi(lt_raw)
+    if v <= 0:
+        return 0.0
+    # If it looks like Ray (1e27) scale, normalize.
+    if v > 10_000_000:
+        return float(v) / 1e27
+    return float(v) / 10_000.0
+
+
 async def _fetch_user_reserves(first_users: int = 200, reserves_per_user: int = 20):
     q = """
     query Radar($first:Int!, $rFirst:Int!) {
@@ -233,6 +248,7 @@ async def _fetch_user_reserves(first_users: int = 200, reserves_per_user: int = 
           reserve {
             symbol
             decimals
+            reserveLiquidationThreshold
             price { priceInEth }
           }
         }
@@ -263,24 +279,28 @@ async def aave_radar(threshold: float = 1.15, limit: int = 50):
     for u in users:
         reserves = u.get("reserves") or []
         col_usd = 0.0
+        col_adj_usd = 0.0
         debt_usd = 0.0
 
         for r in reserves:
             rv = r.get("reserve") or {}
             decimals = int(rv.get("decimals") or 18)
             price_e8 = _bi((rv.get("price") or {}).get("priceInEth"))
+            lt = _lt_factor(rv.get("reserveLiquidationThreshold"))
 
             a_bal = _bi(r.get("currentATokenBalance"))
             d_bal = _bi(r.get("currentTotalDebt"))
 
             if r.get("usageAsCollateralEnabledOnUser") and a_bal > 0 and price_e8 > 0:
-                col_usd += _token_usd(a_bal, decimals, price_e8)
+                v = _token_usd(a_bal, decimals, price_e8)
+                col_usd += v
+                col_adj_usd += v * lt
             if d_bal > 0 and price_e8 > 0:
                 debt_usd += _token_usd(d_bal, decimals, price_e8)
 
         if debt_usd <= 0:
             continue
-        hf = col_usd / max(debt_usd, 1e-9)
+        hf = col_adj_usd / max(debt_usd, 1e-9)
         if hf >= threshold:
             continue
 
@@ -288,6 +308,7 @@ async def aave_radar(threshold: float = 1.15, limit: int = 50):
             "wallet": u.get("id"),
             "healthFactor": float(hf),
             "collateralUsd": float(col_usd),
+            "collateralAdjUsd": float(col_adj_usd),
             "debtUsd": float(debt_usd),
         })
 
@@ -311,6 +332,7 @@ async def aave_wallet(address: str):
           reserve {
             symbol
             decimals
+            reserveLiquidationThreshold
             price { priceInEth }
           }
         }
@@ -324,6 +346,7 @@ async def aave_wallet(address: str):
         return {"ok": True, "address": addr, "found": False, "positions": [], "computed": {}, "ts": int(time.time())}
 
     col_usd = 0.0
+    col_adj_usd = 0.0
     debt_usd = 0.0
     positions = []
 
@@ -332,6 +355,7 @@ async def aave_wallet(address: str):
         sym = rv.get("symbol")
         decimals = int(rv.get("decimals") or 18)
         price_e8 = _bi((rv.get("price") or {}).get("priceInEth"))
+        lt = _lt_factor(rv.get("reserveLiquidationThreshold"))
 
         a_bal = _bi(r.get("currentATokenBalance"))
         d_bal = _bi(r.get("currentTotalDebt"))
@@ -341,6 +365,7 @@ async def aave_wallet(address: str):
 
         if r.get("usageAsCollateralEnabledOnUser"):
             col_usd += a_usd
+            col_adj_usd += a_usd * lt
         debt_usd += d_usd
 
         if (a_bal > 0 or d_bal > 0) and sym:
@@ -351,7 +376,7 @@ async def aave_wallet(address: str):
                 "debtUsd": d_usd,
             })
 
-    hf = (col_usd / max(debt_usd, 1e-9)) if debt_usd > 0 else 999.0
+    hf = (col_adj_usd / max(debt_usd, 1e-9)) if debt_usd > 0 else 999.0
 
     score = max(0.0, min(100.0, ((hf - 1.0) / 0.5) * 100.0))
 
@@ -373,6 +398,7 @@ async def aave_wallet(address: str):
             "healthFactor": float(hf),
             "riskScore": float(score),
             "collateralUsd": float(col_usd),
+            "collateralAdjUsd": float(col_adj_usd),
             "debtUsd": float(debt_usd),
             "timeToLiqLabel": ttl,
         },

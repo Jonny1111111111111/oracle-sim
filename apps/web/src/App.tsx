@@ -332,7 +332,7 @@ export default function App() {
   // Wallets (real Aave V3 Base data via our API)
   const rebuildWallets = useCallback(async () => {
     try {
-      const r = await fetch(`${API}/aave/radar?threshold=1.3&limit=50`)
+      const r = await fetch(`${API}/aave/radar?threshold=1.15&limit=50`)
       const d = await r.json()
       const items = (d.items || []) as Array<{ wallet: string; healthFactor: number; collateralUsd: number; debtUsd: number }>
 
