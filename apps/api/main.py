@@ -182,12 +182,17 @@ async def pyth_prices(assets: str = "ETH,BTC,SOL,USDC,DAI"):
 
 async def gql(query: str, variables: Dict[str, Any] | None = None) -> Dict[str, Any]:
     headers = {"content-type": "application/json"}
-    # TheGraph gateway/studio uses API key header.
-    if THEGRAPH_API_KEY:
-        headers["Authorization"] = f"Bearer {THEGRAPH_API_KEY}"
+
+    # TheGraph Gateway auth:
+    # In practice, gateway endpoints often require the API key in the URL path:
+    #   https://gateway.thegraph.com/api/<API_KEY>/subgraphs/id/<SUBGRAPH_ID>
+    # Some setups also accept an Authorization header, but we default to the path form.
+    url = AAVE_V3_BASE_SUBGRAPH
+    if THEGRAPH_API_KEY and "gateway.thegraph.com/api/subgraphs/id/" in url:
+        url = url.replace("gateway.thegraph.com/api/subgraphs/id/", f"gateway.thegraph.com/api/{THEGRAPH_API_KEY}/subgraphs/id/")
 
     async with httpx.AsyncClient(timeout=25) as client:
-        r = await client.post(AAVE_V3_BASE_SUBGRAPH, json={"query": query, "variables": variables or {}}, headers=headers)
+        r = await client.post(url, json={"query": query, "variables": variables or {}}, headers=headers)
 
     if r.status_code != 200:
         raise HTTPException(status_code=502, detail={"error": "subgraph_http_error", "status": r.status_code, "body": r.text[:800]})
