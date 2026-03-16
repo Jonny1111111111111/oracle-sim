@@ -163,7 +163,8 @@ body {
   flex-shrink:0;
 }
 
-.feed-rows-wrap{flex:1;overflow:hidden;}
+.feed-rows-wrap{flex:1;overflow:auto;}
+.feed-rows-wrap::-webkit-scrollbar{display:none;}
 
 .feed-row {
   display:grid; grid-template-columns:2fr 1fr 1fr 1fr 90px;
@@ -372,6 +373,7 @@ body {
 
   /* Prevent bottom UI overlap on small screens */
   .scroll-hint { display: none; }
+  .feed-rows-wrap { padding-bottom: 12px; }
 
   /* Tighter section padding */
   .section { padding: 16px; }
@@ -387,6 +389,9 @@ body {
     padding: 12px 14px;
     align-items: start;
   }
+
+  .feed-row > * { text-align: left; }
+  .fr-col, .fr-health { font-size: 13px; }
 
   .fr-info { gap: 10px; }
   .fr-addr {
