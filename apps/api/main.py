@@ -1,10 +1,14 @@
 from __future__ import annotations
 
-from fastapi import FastAPI
+import os
+import time
+import json
+from typing import Literal, Dict, Any, List
+
+import httpx
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Literal, Optional, Dict, Any
-import time
 
 app = FastAPI(title="Oracle Sim API", version="0.1.0")
 
@@ -17,35 +21,257 @@ app.add_middleware(
 )
 
 
+# ---- Config ----
+
+PYTH_HERMES_URL = os.getenv("PYTH_HERMES_URL", "https://hermes.pyth.network")
+
+# NOTE: The old hosted-service endpoint (api.thegraph.com/subgraphs/name/...) may be removed.
+# Use a Studio/gateway endpoint + API key if required.
+AAVE_V3_BASE_SUBGRAPH = os.getenv(
+    "AAVE_V3_BASE_SUBGRAPH",
+    "https://api.thegraph.com/subgraphs/name/aave/protocol-v3-base",
+)
+THEGRAPH_API_KEY = os.getenv("THEGRAPH_API_KEY")
+
+
 @app.get("/health")
 def health():
     return {"ok": True, "ts": int(time.time())}
 
 
-# --- Placeholder endpoints (wire to Pyth Hermes + Aave Subgraph next) ---
+# ---- Pyth Hermes ----
+
+# Minimal mapping for MVP. If a symbol is missing, we try to resolve via Hermes price_feeds search.
+# These IDs must match Hermes price feed IDs.
+PYTH_FEED_IDS: Dict[str, str] = {
+    # Crypto
+    "ETH": "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
+    "BTC": "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
+    "SOL": "0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d",
+}
+
+
+async def resolve_pyth_feed_id(symbol: str) -> str | None:
+    """Best-effort resolver for a symbol using Hermes /v2/price_feeds?query=...
+
+    We prefer feeds whose attributes include the symbol and end with /USD.
+    """
+    sym = symbol.upper().strip()
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(f"{PYTH_HERMES_URL}/v2/price_feeds", params={"query": sym})
+        if r.status_code != 200:
+            return None
+        feeds = r.json() or []
+        # Each entry is like {id, attributes:{base,quote, ...}} depending on Hermes version.
+        # We'll handle both shapes.
+        def score(feed: Dict[str, Any]) -> int:
+            attrs = feed.get("attributes") or {}
+            base = (attrs.get("base") or "").upper()
+            quote = (attrs.get("quote") or "").upper()
+            # highest preference: exact base match and USD quote
+            s = 0
+            if base == sym:
+                s += 10
+            if quote == "USD":
+                s += 5
+            # fallback: symbol appears in any string
+            hay = json.dumps(feed).upper()
+            if sym in hay:
+                s += 1
+            return s
+
+        feeds_sorted = sorted(feeds, key=score, reverse=True)
+        if not feeds_sorted:
+            return None
+        return feeds_sorted[0].get("id")
+    except Exception:
+        return None
+
 
 @app.get("/pyth/prices")
-def pyth_prices(assets: str = "ETH,BTC,SOL,USDC,DAI"):
-    # TODO: fetch from public Hermes and normalize
+async def pyth_prices(assets: str = "ETH,BTC,SOL,USDC,DAI"):
     syms = [a.strip().upper() for a in assets.split(",") if a.strip()]
-    return {
-        "ok": True,
-        "ts": int(time.time()),
-        "prices": {s: {"price": None, "conf": None, "publishTime": None} for s in syms},
-    }
+
+    ids: List[str | None] = []
+    for s in syms:
+        fid = PYTH_FEED_IDS.get(s)
+        if not fid:
+            fid = await resolve_pyth_feed_id(s)
+        ids.append(fid)
+
+    params: List[tuple[str, str]] = [("parsed", "true")]
+    for i in ids:
+        if i:
+            params.append(("ids[]", i))
+
+    if not any(ids):
+        return {"ok": True, "ts": int(time.time()), "prices": {s: None for s in syms}}
+
+    url = f"{PYTH_HERMES_URL}/v2/updates/price/latest"
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.get(url, params=params)
+
+    if r.status_code != 200:
+        raise HTTPException(status_code=502, detail={"error": "pyth_hermes_error", "status": r.status_code, "body": r.text[:500]})
+
+    data = r.json()
+    out: Dict[str, Any] = {}
+
+    # Hermes returns `parsed` items with `id`, `price` object {price, conf, expo, publish_time}
+    parsed = data.get("parsed", [])
+    by_id = {p.get("id"): p for p in parsed}
+
+    for sym, feed_id in zip(syms, ids):
+        if not feed_id or feed_id not in by_id:
+            out[sym] = None
+            continue
+        p = by_id[feed_id].get("price", {})
+        price_i = p.get("price")
+        conf_i = p.get("conf")
+        expo = p.get("expo")
+        publish_time = p.get("publish_time")
+        if price_i is None or expo is None:
+            out[sym] = None
+            continue
+
+        # Convert to float using expo
+        price = float(price_i) * (10 ** float(expo))
+        conf = float(conf_i) * (10 ** float(expo)) if conf_i is not None else None
+
+        out[sym] = {
+            "symbol": sym,
+            "feedId": feed_id,
+            "price": price,
+            "conf": conf,
+            "expo": expo,
+            "publishTime": publish_time,
+        }
+
+    return {"ok": True, "ts": int(time.time()), "prices": out}
+
+
+# ---- Aave V3 Base Subgraph ----
+
+async def gql(query: str, variables: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    headers = {"content-type": "application/json"}
+    # TheGraph gateway/studio uses API key header.
+    if THEGRAPH_API_KEY:
+        headers["Authorization"] = f"Bearer {THEGRAPH_API_KEY}"
+
+    async with httpx.AsyncClient(timeout=25) as client:
+        r = await client.post(AAVE_V3_BASE_SUBGRAPH, json={"query": query, "variables": variables or {}}, headers=headers)
+
+    if r.status_code != 200:
+        raise HTTPException(status_code=502, detail={"error": "subgraph_http_error", "status": r.status_code, "body": r.text[:800]})
+
+    j = r.json()
+    if "errors" in j:
+        raise HTTPException(status_code=502, detail={"error": "subgraph_gql_error", "errors": j["errors"]})
+
+    return j["data"]
 
 
 @app.get("/aave/radar")
-def aave_radar(threshold: float = 1.15, limit: int = 50):
-    # TODO: query Aave V3 Base subgraph
-    return {"ok": True, "threshold": threshold, "items": [], "limit": limit, "ts": int(time.time())}
+async def aave_radar(threshold: float = 1.15, limit: int = 50):
+    # NOTE: Aave subgraph schemas vary by version/provider.
+    # We implement a safe, schema-light query for users + their healthFactor if present.
+    # If the endpoint is removed (hosted service sunset), you must set AAVE_V3_BASE_SUBGRAPH to a working gateway URL.
+
+    q = """
+    query Radar($first:Int!) {
+      users(first:$first, orderBy: borrowedReservesCount, orderDirection: desc) {
+        id
+        borrowedReservesCount
+        collateralBalanceUSD
+        borrowedBalanceUSD
+        healthFactor
+      }
+    }
+    """
+
+    data = await gql(q, {"first": 500})
+    users = data.get("users") or []
+
+    items = []
+    for u in users:
+        hf = u.get("healthFactor")
+        if hf is None:
+            continue
+        try:
+            hf_f = float(hf)
+        except Exception:
+            continue
+        if hf_f >= threshold:
+            continue
+        items.append({
+            "wallet": u.get("id"),
+            "healthFactor": hf_f,
+            "collateralUsd": float(u.get("collateralBalanceUSD") or 0),
+            "debtUsd": float(u.get("borrowedBalanceUSD") or 0),
+        })
+
+    items.sort(key=lambda x: x["healthFactor"])
+    return {"ok": True, "threshold": threshold, "items": items[:limit], "ts": int(time.time())}
 
 
 @app.get("/aave/wallet/{address}")
-def aave_wallet(address: str):
-    # TODO: compute healthFactor, liquidation price, etc.
-    return {"ok": True, "address": address, "positions": [], "computed": {}, "ts": int(time.time())}
+async def aave_wallet(address: str):
+    addr = address.lower()
 
+    q = """
+    query Wallet($id: ID!) {
+      user(id: $id) {
+        id
+        collateralBalanceUSD
+        borrowedBalanceUSD
+        healthFactor
+        borrowedReservesCount
+        suppliedReservesCount
+      }
+    }
+    """
+
+    data = await gql(q, {"id": addr})
+    user = data.get("user")
+    if not user:
+        return {"ok": True, "address": addr, "found": False, "positions": [], "computed": {}, "ts": int(time.time())}
+
+    hf = float(user.get("healthFactor") or 0)
+    collateral = float(user.get("collateralBalanceUSD") or 0)
+    debt = float(user.get("borrowedBalanceUSD") or 0)
+
+    # Risk score per your formula: (hf - 1)/0.5 * 100 capped at 100, floor at 0
+    score = max(0.0, min(100.0, ((hf - 1.0) / 0.5) * 100.0))
+
+    # Labels first (MVP)
+    if hf < 1.05:
+        ttl = "< 2 HRS"
+    elif hf < 1.15:
+        ttl = "2–8 HRS"
+    elif hf < 1.3:
+        ttl = "1–3 DAYS"
+    else:
+        ttl = "> 7 DAYS"
+
+    return {
+        "ok": True,
+        "address": addr,
+        "found": True,
+        "positions": [],
+        "computed": {
+            "healthFactor": hf,
+            "riskScore": score,
+            "collateralUsd": collateral,
+            "debtUsd": debt,
+            "timeToLiqLabel": ttl,
+        },
+        "ts": int(time.time()),
+    }
+
+
+# ---- Monte Carlo (placeholder) ----
 
 class MonteCarloRequest(BaseModel):
     asset: Literal["ETH"] = "ETH"
@@ -56,5 +282,5 @@ class MonteCarloRequest(BaseModel):
 
 @app.post("/sim/montecarlo")
 def sim_montecarlo(req: MonteCarloRequest):
-    # TODO: implement GBM using live volatility from Pyth-derived realized vol
+    # TODO: implement GBM using realized volatility derived from Hermes history.
     return {"ok": True, "req": req.model_dump(), "summary": {}, "ts": int(time.time())}

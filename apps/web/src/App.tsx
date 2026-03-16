@@ -292,19 +292,21 @@ export default function App() {
     return () => sw.removeEventListener('scroll', onScroll)
   }, [])
 
-  // Prices fetch (kept same behavior but wired to existing macro-oracle API as placeholder)
+  const API = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000'
+
+  // Prices fetch (from our API -> Pyth Hermes)
   const fetchPrices = useCallback(async () => {
     try {
-      const r = await fetch('https://macro-oracle-api-production.up.railway.app/prices/latest')
+      const r = await fetch(`${API}/pyth/prices?assets=BTC,ETH,SOL`)
       const d = await r.json()
-      const p = d.prices || d
+      const p = d.prices || {}
 
       setPP((prev) => ({ ...prev, ...PX }))
       setPX((prev) => {
         const next = { ...prev }
         ;(['BTC', 'ETH', 'SOL'] as PriceSym[]).forEach((s) => {
           const row = p[s]
-          if (row) next[s] = parseFloat(row.price || row.p || prev[s])
+          if (row?.price != null) next[s] = Number(row.price)
         })
         return next
       })
