@@ -70,12 +70,24 @@ body {
 
 /* ── SCROLL CONTAINER — full screen snap ── */
 .scroll-wrap {
-  position:fixed; top:60px; left:0; right:0; bottom:0;
-  overflow-y:scroll;
-  scroll-snap-type:y mandatory;
-  scroll-behavior:smooth;
+  position: fixed;
+  top: 60px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+
+  overflow-y: scroll;
+  -webkit-overflow-scrolling: touch;
+
+  /* Snap scrolling */
+  scroll-snap-type: y mandatory;
+  scroll-snap-stop: always;
+
+  /* Avoid “laggy” inertial snapping; keep wheel scroll feeling immediate */
+  scroll-behavior: auto;
+  overscroll-behavior-y: contain;
 }
-.scroll-wrap::-webkit-scrollbar{display:none;}
+.scroll-wrap::-webkit-scrollbar { display: none; }
 
 /* ── SECTION — each takes full viewport ── */
 .section {
@@ -198,8 +210,27 @@ body {
 .page-btn.active{background:rgba(41,121,255,0.2);border-color:rgba(41,121,255,0.4);color:var(--blue);}
 
 /* ── SECTION 2: WALLET CHECKER ── */
-#sec-checker{justify-content:center;align-items:center;}
-.checker-inner{width:100%;max-width:600px;display:flex;flex-direction:column;gap:16px;}
+#sec-checker{
+  justify-content: center;
+  align-items: center;
+}
+
+/* Force Section 2 to truly behave like full-screen sections */
+#sec-checker > div {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.checker-inner{
+  width: 100%;
+  max-width: 600px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
 
 .ck-card{--c-top:linear-gradient(90deg,var(--cyan),var(--teal));padding:24px;}
 .ck-h{font-family:'Unbounded',sans-serif;font-size:15px;font-weight:900;color:var(--t1);margin-bottom:5px;}
@@ -287,20 +318,112 @@ body {
 @keyframes hint-bounce{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(6px)}}
 
 .nav-dots {
-  position:fixed; right:20px; top:50%; transform:translateY(-50%);
-  z-index:50; display:flex; flex-direction:column; gap:8px;
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+
+  /* keep clicks reliable over animated background */
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
 }
 .nav-dot {
-  width:8px; height:8px; border-radius:50%;
-  background:rgba(0,0,0,0.15); border:1.5px solid rgba(0,0,0,0.2);
-  cursor:pointer; transition:all 0.2s;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.15);
+  border: 1.5px solid rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  transition: all 0.2s;
 }
-.nav-dot.active{background:var(--blue);border-color:var(--blue);box-shadow:0 0 8px rgba(41,121,255,0.5);}
+.nav-dot.active {
+  background: var(--blue);
+  border-color: var(--blue);
+  box-shadow: 0 0 8px rgba(41, 121, 255, 0.5);
+}
 
-@media(max-width:900px){
-  .radar-grid{grid-template-columns:1fr;}
-  .stats-row{grid-template-columns:1fr;}
-  .feed-cols,.feed-row{grid-template-columns:2fr 1fr 1fr 80px;}
-  .feed-cols>*:nth-child(4),.feed-row>*:nth-child(4){display:none;}
-  .tb-right .price-chip:last-child{display:none;}
+@media (max-width: 900px) {
+  .radar-grid { grid-template-columns: 1fr; }
+  .stats-row { grid-template-columns: 1fr; }
+
+  /* medium screens: reduce one column */
+  .feed-cols, .feed-row { grid-template-columns: 2fr 1fr 1fr 80px; }
+  .feed-cols > *:nth-child(4), .feed-row > *:nth-child(4) { display: none; }
+
+  .tb-right .price-chip:last-child { display: none; }
+}
+
+/* iPhone-ish mobile layout */
+@media (max-width: 480px) {
+  .topbar {
+    padding: 0 14px;
+    gap: 10px;
+  }
+
+  /* Topbar: keep logo + pills only */
+  .tb-right { display: none; }
+
+  /* Tighter section padding */
+  .section { padding: 16px; }
+
+  /* Section 1: radar becomes stacked rows */
+  .radar-grid { gap: 14px; }
+
+  .feed-cols { display: none; }
+
+  .feed-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 12px 14px;
+  }
+
+  .fr-info { gap: 10px; }
+  .fr-addr {
+    font-size: 11px;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  /* Show key numbers in a compact 2-col grid */
+  .feed-row > .fr-col,
+  .feed-row > .fr-health,
+  .feed-row > .badge {
+    justify-self: start;
+  }
+
+  .feed-row {
+    align-items: start;
+  }
+
+  /* Section 2: full width cards */
+  .checker-inner {
+    max-width: 100%;
+    padding: 0;
+  }
+  .ck-card,
+  .result-card {
+    padding: 18px;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Section 3: stack cards */
+  .stats-row {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  /* Nav dots: keep bottom center but avoid covering content */
+  .nav-dots {
+    bottom: 12px;
+  }
 }
