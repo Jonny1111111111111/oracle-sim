@@ -29,14 +29,26 @@ PYTH_HERMES_URL = os.getenv("PYTH_HERMES_URL", "https://hermes.pyth.network")
 # Use a Studio/gateway endpoint + API key if required.
 AAVE_V3_BASE_SUBGRAPH = os.getenv(
     "AAVE_V3_BASE_SUBGRAPH",
-    "https://api.thegraph.com/subgraphs/name/aave/protocol-v3-base",
+    # Aave V3 Base subgraph (Graph Studio gateway). Confirmed working URL provided by operator.
+    "https://gateway.thegraph.com/api/subgraphs/id/GQFbb95cE6d8mV989mL5figjaGaKCQB3xqYrr1bRyXqF",
 )
 THEGRAPH_API_KEY = os.getenv("THEGRAPH_API_KEY")
 
 
+@app.get("/")
+def root():
+    # Railway default healthcheck hits "/".
+    return {
+        "ok": True,
+        "service": "oracle-sim-api",
+        "version": app.version,
+        "ts": int(time.time()),
+    }
+
+
 @app.get("/health")
 def health():
-    return {"ok": True, "ts": int(time.time())}
+    return {"ok": True, "service": "oracle-sim-api", "version": app.version, "ts": int(time.time())}
 
 
 # ---- Pyth Hermes ----

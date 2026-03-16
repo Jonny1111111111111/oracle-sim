@@ -292,7 +292,7 @@ export default function App() {
     return () => sw.removeEventListener('scroll', onScroll)
   }, [])
 
-  const API = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000'
+  const API = (import.meta as any).env?.VITE_API_URL || 'https://considerate-success-production-8c54.up.railway.app'
 
   // Prices fetch (from our API -> Pyth Hermes)
   const fetchPrices = useCallback(async () => {
@@ -329,108 +329,141 @@ export default function App() {
     return () => clearInterval(t)
   }, [fetchPrices])
 
-  // Wallets (placeholder generator - will wire to /aave/radar)
-  const PROTOS: WalletRow['proto'][] = ['Aave V3', 'Compound', 'Morpho']
+  // Wallets (real Aave V3 Base data via our API)
+  const rebuildWallets = useCallback(async () => {
+    try {
+      const r = await fetch(`${API}/aave/radar?threshold=1.3&limit=50`)
+      const d = await r.json()
+      const items = (d.items || []) as Array<{ wallet: string; healthFactor: number; collateralUsd: number; debtUsd: number }>
 
-  const genWallet = useCallback((): WalletRow => {
-    const h = Math.random() < 0.12 ? 1 + Math.random() * 0.07 : Math.random() < 0.3 ? 1.07 + Math.random() * 0.12 : 1.19 + Math.random() * 0.9
-    const col = Math.random() * 500000 + 15000
-    const liq = (PX.ETH || 3200) * (0.6 + Math.random() * 0.3)
-    const addr =
-      '0x' +
-      Array.from({ length: 4 }, () => Math.floor(Math.random() * 0xffff).toString(16).padStart(4, '0')).join('') +
-      '...' +
-      Math.floor(Math.random() * 0xffff)
-        .toString(16)
-        .padStart(4, '0')
+      const wallets: WalletRow[] = items
+        .map((it) => {
+          const hf = Number(it.healthFactor)
+          const eth = Number(PX.ETH || 3200)
+          // Heuristic: for HF=1, liq ~ current; higher HF => liq further below current.
+          const liq = hf > 0 ? eth / hf : eth
 
-    return { h, col, liq, addr, proto: PROTOS[Math.floor(Math.random() * PROTOS.length)] }
-  }, [PX.ETH])
+          return {
+            addr: it.wallet,
+            proto: 'Aave V3' as const,
+            h: hf,
+            col: Number(it.collateralUsd || 0),
+            liq,
+          }
+        })
+        .sort((a, b) => a.h - b.h)
 
-  const rebuildWallets = useCallback(() => {
-    const wallets = Array.from({ length: 50 }, genWallet).sort((a, b) => a.h - b.h)
-    setAllWallets(wallets)
-    setPage(1)
-  }, [genWallet])
+      setAllWallets(wallets)
+      setPage(1)
+    } catch {
+      // If the subgraph is temporarily unavailable, keep last state.
+    }
+  }, [API, PX.ETH])
 
   useEffect(() => {
     rebuildWallets()
-    const t = setInterval(rebuildWallets, 10000)
+    const t = setInterval(rebuildWallets, 15000)
     return () => clearInterval(t)
   }, [rebuildWallets])
 
-  // Wallet checker (placeholder logic; will wire to /aave/wallet/:address + score formula)
-  const runCheck = useCallback(
-    (addr: string) => {
-      const h = 0.8 + Math.random() * 1.5
-      const col = Math.random() * 200000 + 8000
-      const debt = col * (0.4 + Math.random() * 0.4)
-      const liq = (PX.ETH || 3200) * (0.6 + Math.random() * 0.32)
-      const score = Math.max(0, Math.min(100, ((h - 0.8) / 1.5) * 100))
-      const colorVar = h < 1.05 ? 'var(--red)' : h < 1.15 ? 'var(--orange)' : h < 1.3 ? 'var(--yellow)' : 'var(--green)'
-      return { h, col, debt, liq, score, colorVar, short: shortAddr(addr) }
-    },
-    [PX.ETH],
-  )
+  const doCheckQuick = useCallback(async () => {
+    const addr = (quickAddr || '').trim()
+    if (!addr) return
 
-  const doCheckQuick = useCallback(() => {
-    const addr = (quickAddr || '').trim() || '0x' + Array.from({ length: 8 }, () => Math.floor(Math.random() * 0xffff).toString(16).padStart(4, '0')).join('').slice(0, 40)
-    const { score, colorVar, h } = runCheck(addr)
-    const status = h < 1.05 ? '⚠ CRITICAL' : h < 1.15 ? '⚡ HIGH RISK' : h < 1.3 ? 'ELEVATED' : '✓ HEALTHY'
-    setQuickResult({ score, colorVar, status })
-  }, [quickAddr, runCheck])
+    try {
+      const r = await fetch(`${API}/aave/wallet/${addr}`)
+      const d = await r.json()
+      const hf = Number(d?.computed?.healthFactor)
+      const score = Number(d?.computed?.riskScore)
 
-  const doCheck = useCallback(() => {
-    const addr = (checkAddr || '').trim() || '0x' + Array.from({ length: 8 }, () => Math.floor(Math.random() * 0xffff).toString(16).padStart(4, '0')).join('').slice(0, 40)
-    const { h, col, debt, liq, score, colorVar, short } = runCheck(addr)
+      if (!Number.isFinite(hf) || !Number.isFinite(score)) throw new Error('bad_response')
 
-    const status =
-      h < 1.05
-        ? '⚠ CRITICAL — LIQUIDATION IMMINENT'
-        : h < 1.15
-          ? '⚡ HIGH RISK — ACT NOW'
-          : h < 1.3
-            ? '⚠ ELEVATED RISK'
-            : '✓ POSITION IS HEALTHY'
-
-    const gaugeBg =
-      h < 1.05
-        ? 'var(--red)'
-        : h < 1.15
-          ? 'linear-gradient(90deg,var(--red),var(--orange))'
-          : h < 1.3
-            ? 'linear-gradient(90deg,var(--orange),var(--yellow))'
-            : 'linear-gradient(90deg,var(--yellow),var(--green))'
-
-    const time = h < 1.05 ? '< 2 HRS' : h < 1.15 ? '2–8 HRS' : h < 1.3 ? '1–3 DAYS' : '> 7 DAYS'
-
-    let alertClass = 'alert-strip a-safe'
-    let alertText = `✓ Position healthy. Liquidation price $${liq.toFixed(0)} is well below current ETH.`
-
-    if (h < 1.05) {
-      alertClass = 'alert-strip a-danger'
-      alertText =
-        '🚨 CRITICAL: Liquidation triggers if ETH drops another ' + ((1 - liq / (PX.ETH || 3200)) * 100).toFixed(1) + '%. Add collateral immediately.'
-    } else if (h < 1.15) {
-      alertClass = 'alert-strip a-warn'
-      alertText = `⚠ HIGH RISK: Liquidation price $${liq.toFixed(0)} is dangerously close. Reduce exposure.`
+      const colorVar = hf < 1.05 ? 'var(--red)' : hf < 1.15 ? 'var(--orange)' : hf < 1.3 ? 'var(--yellow)' : 'var(--green)'
+      const status = hf < 1.05 ? '⚠ CRITICAL' : hf < 1.15 ? '⚡ HIGH RISK' : hf < 1.3 ? 'ELEVATED' : '✓ HEALTHY'
+      setQuickResult({ score, colorVar, status })
+    } catch {
+      setQuickResult({ score: 0, colorVar: 'var(--t3)', status: 'API ERROR' })
     }
+  }, [API, quickAddr])
 
-    setResult({
-      short,
-      ts: new Date().toLocaleTimeString('en-US', { hour12: false }),
-      score: Number(score.toFixed(0)),
-      colorVar,
-      status,
-      gauge: { widthPct: score, background: gaugeBg },
-      collateral: fmtUsd(col, 0),
-      debt: fmtUsd(debt, 0),
-      liq: fmtUsd(liq, 0),
-      time,
-      alertClass,
-      alertText,
-    })
-  }, [checkAddr, runCheck, PX.ETH])
+  const doCheck = useCallback(async () => {
+    const addr = (checkAddr || '').trim()
+    if (!addr) return
+
+    try {
+      const r = await fetch(`${API}/aave/wallet/${addr}`)
+      const d = await r.json()
+
+      const hf = Number(d?.computed?.healthFactor)
+      const score = Number(d?.computed?.riskScore)
+      const col = Number(d?.computed?.collateralUsd)
+      const debt = Number(d?.computed?.debtUsd)
+      const time = String(d?.computed?.timeToLiqLabel || '—')
+
+      if (!Number.isFinite(hf) || !Number.isFinite(score)) throw new Error('bad_response')
+
+      const colorVar = hf < 1.05 ? 'var(--red)' : hf < 1.15 ? 'var(--orange)' : hf < 1.3 ? 'var(--yellow)' : 'var(--green)'
+
+      const status =
+        hf < 1.05
+          ? '⚠ CRITICAL — LIQUIDATION IMMINENT'
+          : hf < 1.15
+            ? '⚡ HIGH RISK — ACT NOW'
+            : hf < 1.3
+              ? '⚠ ELEVATED RISK'
+              : '✓ POSITION IS HEALTHY'
+
+      const gaugeBg =
+        hf < 1.05
+          ? 'var(--red)'
+          : hf < 1.15
+            ? 'linear-gradient(90deg,var(--red),var(--orange))'
+            : hf < 1.3
+              ? 'linear-gradient(90deg,var(--orange),var(--yellow))'
+              : 'linear-gradient(90deg,var(--yellow),var(--green))'
+
+      let alertClass = 'alert-strip a-safe'
+      let alertText = '✓ Position healthy.'
+
+      if (hf < 1.05) {
+        alertClass = 'alert-strip a-danger'
+        alertText = '🚨 CRITICAL: Health Factor extremely low. Add collateral / reduce debt immediately.'
+      } else if (hf < 1.15) {
+        alertClass = 'alert-strip a-warn'
+        alertText = '⚠ HIGH RISK: Health Factor close to liquidation. Consider reducing exposure.'
+      }
+
+      setResult({
+        short: shortAddr(addr),
+        ts: new Date().toLocaleTimeString('en-US', { hour12: false }),
+        score: Number(score.toFixed(0)),
+        colorVar,
+        status,
+        gauge: { widthPct: score, background: gaugeBg },
+        collateral: fmtUsd(Number.isFinite(col) ? col : 0, 0),
+        debt: fmtUsd(Number.isFinite(debt) ? debt : 0, 0),
+        liq: '—',
+        time,
+        alertClass,
+        alertText,
+      })
+    } catch {
+      setResult({
+        short: shortAddr(addr),
+        ts: new Date().toLocaleTimeString('en-US', { hour12: false }),
+        score: 0,
+        colorVar: 'var(--t3)',
+        status: 'API ERROR',
+        gauge: { widthPct: 0, background: 'var(--t3)' },
+        collateral: '—',
+        debt: '—',
+        liq: '—',
+        time: '—',
+        alertClass: 'alert-strip a-warn',
+        alertText: 'Could not fetch wallet data from API.',
+      })
+    }
+  }, [API, checkAddr])
 
   const onQuickKey = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
