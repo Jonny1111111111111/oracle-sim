@@ -57,9 +57,11 @@ def health():
 # These IDs must match Hermes price feed IDs.
 PYTH_FEED_IDS: Dict[str, str] = {
     # Crypto
-    "ETH": "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
-    "BTC": "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
-    "SOL": "0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d",
+    # NOTE: Hermes returns IDs without the leading "0x" in the parsed response.
+    # We normalize IDs to *no* "0x" internally.
+    "ETH": "ff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
+    "BTC": "e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
+    "SOL": "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d",
 }
 
 
@@ -96,7 +98,10 @@ async def resolve_pyth_feed_id(symbol: str) -> str | None:
         feeds_sorted = sorted(feeds, key=score, reverse=True)
         if not feeds_sorted:
             return None
-        return feeds_sorted[0].get("id")
+        fid = feeds_sorted[0].get("id")
+        if isinstance(fid, str) and fid.startswith("0x"):
+            fid = fid[2:]
+        return fid
     except Exception:
         return None
 
@@ -114,8 +119,10 @@ async def pyth_prices(assets: str = "ETH,BTC,SOL,USDC,DAI"):
 
     params: List[tuple[str, str]] = [("parsed", "true")]
     for i in ids:
-        if i:
-            params.append(("ids[]", i))
+        if not i:
+            continue
+        fid = i[2:] if i.startswith("0x") else i
+        params.append(("ids[]", fid))
 
     if not any(ids):
         return {"ok": True, "ts": int(time.time()), "prices": {s: None for s in syms}}
@@ -133,13 +140,19 @@ async def pyth_prices(assets: str = "ETH,BTC,SOL,USDC,DAI"):
 
     # Hermes returns `parsed` items with `id`, `price` object {price, conf, expo, publish_time}
     parsed = data.get("parsed", [])
-    by_id = {p.get("id"): p for p in parsed}
+    def norm_id(x: str | None) -> str | None:
+        if not x or not isinstance(x, str):
+            return None
+        return x[2:] if x.startswith("0x") else x
+
+    by_id = {norm_id(p.get("id")): p for p in parsed}
 
     for sym, feed_id in zip(syms, ids):
-        if not feed_id or feed_id not in by_id:
+        fid = norm_id(feed_id)
+        if not fid or fid not in by_id:
             out[sym] = None
             continue
-        p = by_id[feed_id].get("price", {})
+        p = by_id[fid].get("price", {})
         price_i = p.get("price")
         conf_i = p.get("conf")
         expo = p.get("expo")
@@ -149,8 +162,9 @@ async def pyth_prices(assets: str = "ETH,BTC,SOL,USDC,DAI"):
             continue
 
         # Convert to float using expo
-        price = float(price_i) * (10 ** float(expo))
-        conf = float(conf_i) * (10 ** float(expo)) if conf_i is not None else None
+        expo_i = int(expo)
+        price = float(price_i) * (10 ** expo_i)
+        conf = float(conf_i) * (10 ** expo_i) if conf_i is not None else None
 
         out[sym] = {
             "symbol": sym,
