@@ -382,6 +382,24 @@ body {
 
 /* iPhone-ish mobile layout */
 @media (max-width: 480px) {
+  /* MOBILE: disable snap scrolling entirely (snap fights inner content scroll) */
+  html, body, #root { height: auto !important; overflow: auto !important; }
+  .scroll-wrap {
+    position: static !important;
+    top: auto; bottom: auto; left: auto; right: auto;
+    height: auto !important;
+    overflow-y: visible !important;
+    -webkit-overflow-scrolling: auto;
+    scroll-snap-type: none !important;
+    scroll-snap-stop: normal;
+    scroll-behavior: auto;
+  }
+  .section {
+    height: auto !important;
+    min-height: calc(100vh - 60px);
+    scroll-snap-align: none !important;
+  }
+
   .topbar {
     padding: 0 14px;
     gap: 10px;
@@ -498,12 +516,6 @@ body {
   .stats-row {
     grid-template-columns: 1fr;
     gap: 14px;
-  }
-
-  /* Mobile: make section snap feel less “choppy” */
-  .scroll-wrap{
-    scroll-snap-stop: normal;
-    scroll-behavior: smooth;
   }
 
   /* Nav dots: bottom center but lifted so it doesn't cover cards */
