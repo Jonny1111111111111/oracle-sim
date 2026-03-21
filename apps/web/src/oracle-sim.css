@@ -320,6 +320,17 @@ body {
 #sec-stats{}
 .stats-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;flex:1;min-height:0;}
 
+/* Section 3: force clean two-column layout + centered content */
+#sec-stats .stats-row{grid-template-columns:1fr 1fr;}
+#sec-stats .b-card{
+  width:100%;
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+}
+#sec-stats .b-card > *{width:100%;}
+#sec-stats .proto-table{width:100%;}
+
 .b-card{padding:22px;}
 .bc-h{font-family:'Unbounded',sans-serif;font-size:13px;font-weight:900;color:var(--t1);margin-bottom:4px;}
 .bc-s{font-size:11px;color:var(--t3);margin-bottom:18px;}
@@ -383,6 +394,7 @@ body {
 @media (max-width: 900px) {
   .radar-grid { grid-template-columns: 1fr; }
   .stats-row { grid-template-columns: 1fr; }
+  #sec-stats .stats-row { grid-template-columns: 1fr; }
 
   /* medium screens: reduce one column */
   .feed-cols, .feed-row { grid-template-columns: 2fr 1fr 1fr 80px; }
