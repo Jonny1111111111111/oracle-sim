@@ -327,9 +327,25 @@ body {
   display:flex;
   flex-direction:column;
   align-items:stretch;
+  overflow:visible; /* avoid clipping long Safe Builder content */
 }
 #sec-stats .b-card > *{width:100%;}
 #sec-stats .proto-table{width:100%;}
+
+/* Desktop: let Section 3 expand naturally so Safe Builder shows all content */
+@media (min-width: 481px) {
+  #sec-stats{
+    height:auto;
+    min-height:calc(100vh - 60px);
+  }
+  #sec-stats .stats-row{
+    flex:none;
+    min-height:auto;
+  }
+  #sec-stats .os-footer{
+    margin-top:18px; /* override margin-top:auto so it doesn't compress cards */
+  }
+}
 
 .b-card{padding:22px;}
 .bc-h{font-family:'Unbounded',sans-serif;font-size:13px;font-weight:900;color:var(--t1);margin-bottom:4px;}
