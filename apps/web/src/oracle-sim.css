@@ -406,14 +406,17 @@ body {
     min-height: auto;
   }
 
-  .feed-card { height: auto; }
+  /* Give the radar table the whole section on mobile */
+  .feed-card { height: 100%; }
   .feed-rows-wrap {
-    /* allow scroll inside the card if needed */
-    max-height: 42vh;
-    overflow: auto;
+    max-height: none;
+    overflow: visible;
   }
 
   /* MOBILE RADAR: show only WALLET, HEALTH, RISK */
+  /* hide sidebar cards so the table can show all 10 rows + pagination */
+  .radar-grid > div:last-child { display: none; }
+
   .feed-cols{
     display:grid;
     grid-template-columns: 1fr 90px 90px;
@@ -467,11 +470,20 @@ body {
     flex-wrap: wrap;
   }
 
-  /* Section 2: full width cards */
+  /* Section 2: remove “small rectangle” effect; let content expand */
+  #sec-checker{
+    justify-content: flex-start;
+    overflow: auto;
+  }
   #sec-checker > div{
     max-width: 100%;
+    height: auto;
+    max-height: none;
+    justify-content: flex-start;
+    overflow: visible;
     padding: 0 16px;
   }
+
   .ck-card,
   .result-card {
     width: 100%;
@@ -486,6 +498,12 @@ body {
   .stats-row {
     grid-template-columns: 1fr;
     gap: 14px;
+  }
+
+  /* Mobile: make section snap feel less “choppy” */
+  .scroll-wrap{
+    scroll-snap-stop: normal;
+    scroll-behavior: smooth;
   }
 
   /* Nav dots: bottom center but lifted so it doesn't cover cards */
