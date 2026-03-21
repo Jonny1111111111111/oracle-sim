@@ -625,8 +625,8 @@ export default function App() {
         </div>
 
         {/* SECTION 2 */}
-        <div className="section" id="sec-checker" style={{ justifyContent: 'center', alignItems: 'center' }}>
-          <div style={{ width: '100%', maxWidth: 600 }}>
+        <div className="section" id="sec-checker">
+          <div className="checker-shell">
             <div className="sec-eyebrow" style={{ justifyContent: 'center' }}>
               <span />SECTION 02<span />
             </div>
@@ -752,7 +752,7 @@ export default function App() {
             Safe <em style={{ color: 'var(--orange)' }}>Builder</em>
           </div>
 
-          <div className="stats-row" style={{ gridTemplateColumns: '1fr 1fr', alignItems: 'start' }}>
+          <div className="stats-row">
             {/* A) SAFE POSITION BUILDER */}
             <div className="card b-card" style={{ ['--c-top' as any]: 'linear-gradient(90deg,var(--teal),var(--green))' }}>
               <div className="bc-h">SAFE POSITION BUILDER</div>

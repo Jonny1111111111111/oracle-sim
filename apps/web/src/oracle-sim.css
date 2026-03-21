@@ -12,6 +12,13 @@
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body,#root{height:100%;overflow:hidden;}
 
+/* Section 2 shell: constrain on desktop, full-width on mobile */
+.checker-shell{
+  width:100%;
+  max-width:600px;
+  margin:0 auto;
+}
+
 body {
   background:#fafaf8;
   font-family:'Space Grotesk',sans-serif;
@@ -433,8 +440,13 @@ body {
 }
 
 @media (max-width: 480px) {
-  /* MOBILE: disable snap scrolling entirely (snap fights inner content scroll) */
+  /* MOBILE: full width sections + natural scroll */
   html, body, #root { height: auto !important; overflow: auto !important; }
+
+  .checker-shell{
+    max-width:none;
+    padding:0 16px;
+  }
   .scroll-wrap {
     position: static !important;
     top: auto; bottom: auto; left: auto; right: auto;
@@ -570,6 +582,10 @@ body {
     grid-template-columns: 1fr;
     gap: 14px;
   }
+
+  /* Footer should stack vertically on mobile */
+  .os-footer-top{flex-direction:column;align-items:flex-start;}
+  .os-footer-links{flex-direction:column;align-items:flex-start;gap:8px;}
 
   /* Nav dots: bottom center but lifted so it doesn't cover cards */
   .nav-dots {
