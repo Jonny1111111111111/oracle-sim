@@ -379,18 +379,45 @@ body {
   .section { padding: 16px; }
 
   /* Section 1: radar becomes stacked rows */
-  .radar-grid { gap: 14px; }
+  .radar-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    flex: unset;
+    min-height: auto;
+  }
+
+  .feed-card { height: auto; }
+  .feed-rows-wrap {
+    /* keep multiple rows visible, allow scroll inside the card if needed */
+    max-height: 42vh;
+    overflow: auto;
+  }
 
   .feed-cols { display: none; }
 
+  /* Re-map the existing 5 grid children into a clean mobile layout
+     children: (1) info, (2) collateral, (3) health, (4) liq, (5) risk badge */
   .feed-row {
-    grid-template-columns: 1fr;
-    gap: 10px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "info info"
+      "collateral health"
+      "risk risk";
+    gap: 12px 14px;
     padding: 12px 14px;
     align-items: start;
   }
 
   .feed-row > * { text-align: left; }
+
+  .feed-row > :nth-child(1) { grid-area: info; }
+  .feed-row > :nth-child(2) { grid-area: collateral; }
+  .feed-row > :nth-child(3) { grid-area: health; }
+  .feed-row > :nth-child(4) { display: none; } /* hide LIQ on mobile */
+  .feed-row > :nth-child(5) { grid-area: risk; justify-self: start; }
+
   .fr-col, .fr-health { font-size: 13px; }
 
   .fr-info { gap: 10px; }
