@@ -13,7 +13,7 @@
 html,body,#root{height:100%;overflow:hidden;}
 
 body {
-  background:#0a0f1e;
+  background:#fafaf8;
   font-family:'Space Grotesk',sans-serif;
   color:var(--t1);
 }
@@ -38,8 +38,9 @@ body {
   font-size:18px; font-weight:900; color:var(--t1);
 }
 
-/* keep topbar readable on dark background */
-.topbar{ background:rgba(10,15,30,0.92); border-bottom:1.5px solid rgba(255,255,255,0.08); }
+/* Topbar on warm cream background */
+.topbar{ background:rgba(250,250,248,0.92); border-bottom:1.5px solid rgba(10,14,35,0.10); }
+.logo{ color:#0a0e23; }
 .logo-icon {
   width:36px; height:36px; border-radius:9px;
   background:linear-gradient(135deg,#0a0e23,#1a2550);
@@ -82,13 +83,13 @@ body {
   overflow-y: scroll;
   -webkit-overflow-scrolling: touch;
 
-  /* Snap scrolling */
-  scroll-snap-type: y mandatory;
+  /* Snap scrolling (desktop): proximity avoids “bounce back” feeling */
+  scroll-snap-type: y proximity;
   scroll-snap-stop: always;
 
-  /* Avoid “laggy” inertial snapping; keep wheel scroll feeling immediate */
-  scroll-behavior: auto;
-  overscroll-behavior-y: contain;
+  /* Smooth section settling */
+  scroll-behavior: smooth;
+  overscroll-behavior-y: auto;
 }
 .scroll-wrap::-webkit-scrollbar { display: none; }
 
@@ -104,14 +105,14 @@ body {
 /* section labels */
 .sec-eyebrow {
   font-size:9px; font-weight:700; letter-spacing:0.25em;
-  color:rgba(255,255,255,0.35); margin-bottom:6px; text-transform:uppercase;
+  color:rgba(10,14,35,0.45); margin-bottom:6px; text-transform:uppercase;
   display:flex; align-items:center; gap:8px;
 }
-.sec-eyebrow span{display:inline-block;width:20px;height:1px;background:rgba(255,255,255,0.18);}
+.sec-eyebrow span{display:inline-block;width:20px;height:1px;background:rgba(10,14,35,0.18);}
 .sec-title {
   font-family:'Unbounded',sans-serif;
   font-size:clamp(20px,3.5vw,32px); font-weight:900;
-  color:var(--t1); margin-bottom:20px; line-height:1.15;
+  color:#0a0e23; margin-bottom:20px; line-height:1.15;
 }
 .sec-title em{font-style:normal;}
 
@@ -334,7 +335,7 @@ body {
 .scroll-hint {
   position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
   z-index:50; display:flex; flex-direction:column; align-items:center; gap:4px;
-  font-size:9px; font-weight:700; letter-spacing:0.18em; color:rgba(0,0,0,0.3);
+  font-size:9px; font-weight:700; letter-spacing:0.18em; color:rgba(10,14,35,0.45);
   animation:hint-bounce 2s ease-in-out infinite;
 }
 .scroll-hint-arrow{font-size:16px;line-height:1;}
@@ -353,16 +354,16 @@ body {
   /* keep clicks reliable over animated background */
   padding: 10px 14px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.55);
+  background: rgba(250, 250, 248, 0.70);
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(10, 14, 35, 0.10);
 }
 .nav-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.15);
-  border: 1.5px solid rgba(0, 0, 0, 0.2);
+  background: rgba(10, 14, 35, 0.16);
+  border: 1.5px solid rgba(10, 14, 35, 0.22);
   cursor: pointer;
   transition: all 0.2s;
 }
@@ -384,6 +385,53 @@ body {
 }
 
 /* iPhone-ish mobile layout */
+/* ── FOOTER (Section 3) ── */
+.os-footer{
+  margin-top:auto;
+  padding-top:18px;
+}
+.os-footer-inner{
+  background:rgba(250,250,248,0.72);
+  border:1px solid rgba(10,14,35,0.10);
+  border-radius:14px;
+  padding:18px 18px;
+  backdrop-filter:blur(14px);
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.os-footer-top{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:14px;
+  flex-wrap:wrap;
+}
+.os-footer-logo{
+  font-family:'Unbounded',sans-serif;
+  font-weight:900;
+  letter-spacing:0.06em;
+  color:#0a0e23;
+}
+.os-footer-tag{font-size:12px;color:rgba(10,14,35,0.62);font-weight:600;}
+.os-footer-links{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px 14px;
+  font-size:12px;
+  font-weight:700;
+}
+.os-footer-links a{color:#0a0e23;text-decoration:none;border-bottom:1px solid rgba(10,14,35,0.22);}
+.os-footer-links a:hover{border-bottom-color:rgba(10,14,35,0.55);}
+.os-footer-bottom{
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  flex-wrap:wrap;
+  font-size:11px;
+  color:rgba(10,14,35,0.62);
+}
+
 @media (max-width: 480px) {
   /* MOBILE: disable snap scrolling entirely (snap fights inner content scroll) */
   html, body, #root { height: auto !important; overflow: auto !important; }
