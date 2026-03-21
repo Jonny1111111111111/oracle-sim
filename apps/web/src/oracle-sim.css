@@ -128,6 +128,25 @@ body {
 /* ── SECTION 1: LIVE RADAR ── */
 #sec-radar { justify-content:flex-start; }
 
+/* ── SECTION 2: force full-height + centered content with internal scroll ── */
+#sec-checker{
+  justify-content:center;
+  align-items:center;
+  overflow:hidden;
+}
+#sec-checker > div{
+  width:100%;
+  max-width:600px;
+  height:100%;
+  max-height:100%;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  overflow:auto;
+  padding:0 4px;
+}
+#sec-checker > div::-webkit-scrollbar{display:none;}
+
 .radar-grid {
   display:grid;
   grid-template-columns:1fr 360px;
@@ -264,17 +283,17 @@ body {
 }
 .analyze-btn:hover{box-shadow:0 0 28px rgba(0,229,255,0.2);transform:translateY(-1px);}
 
-.result-card{--c-top:linear-gradient(90deg,var(--red),var(--orange));padding:22px;display:none;}
-.result-card.show{display:block;}
-.rr-meta{display:flex;justify-content:space-between;margin-bottom:14px;}
+.result-card{--c-top:linear-gradient(90deg,var(--red),var(--orange));padding:22px;display:none;flex-direction:column;gap:16px;}
+.result-card.show{display:flex;}
+.rr-meta{display:flex;justify-content:space-between;}
 .rr-addr{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3);}
 .rr-ts{font-size:10px;color:var(--t3);}
-.score-center{text-align:center;margin-bottom:16px;}
+.score-center{text-align:center;}
 .score-lbl{font-size:10px;font-weight:700;letter-spacing:0.22em;color:var(--t3);margin-bottom:5px;}
 .score-num{font-family:'Unbounded',sans-serif;font-size:72px;font-weight:900;line-height:1;transition:color 0.4s;}
 .score-status{font-size:12px;font-weight:700;letter-spacing:0.08em;margin-top:5px;}
-.gauge-wrap{margin-bottom:16px;}
-.gauge-bar{height:10px;background:rgba(255,255,255,0.08);border-radius:5px;overflow:hidden;margin-bottom:6px;}
+.gauge-wrap{width:100%;}
+.gauge-bar{width:100%;height:10px;background:rgba(255,255,255,0.08);border-radius:5px;overflow:hidden;margin:0 auto 6px;}
 .gauge-fill{height:100%;border-radius:5px;transition:width 1s ease,background 0.5s;}
 .gauge-labels{display:flex;justify-content:space-between;font-size:10px;font-weight:700;}
 .stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:14px;}
@@ -378,7 +397,7 @@ body {
   /* Tighter section padding */
   .section { padding: 16px; }
 
-  /* Section 1: radar becomes stacked rows */
+  /* Section 1: radar becomes single column grid */
   .radar-grid {
     display: flex;
     flex-direction: column;
@@ -389,36 +408,45 @@ body {
 
   .feed-card { height: auto; }
   .feed-rows-wrap {
-    /* keep multiple rows visible, allow scroll inside the card if needed */
+    /* allow scroll inside the card if needed */
     max-height: 42vh;
     overflow: auto;
   }
 
-  .feed-cols { display: none; }
-
-  /* Re-map the existing 5 grid children into a clean mobile layout
-     children: (1) info, (2) collateral, (3) health, (4) liq, (5) risk badge */
-  .feed-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    grid-template-areas:
-      "info info"
-      "collateral health"
-      "risk risk";
-    gap: 12px 14px;
-    padding: 12px 14px;
-    align-items: start;
+  /* MOBILE RADAR: show only WALLET, HEALTH, RISK */
+  .feed-cols{
+    display:grid;
+    grid-template-columns: 1fr 90px 90px;
+    gap: 10px;
+  }
+  .feed-cols > *:nth-child(2),
+  .feed-cols > *:nth-child(4){
+    display:none;
   }
 
-  .feed-row > * { text-align: left; }
+  .feed-row{
+    display:grid;
+    grid-template-columns: 1fr 90px 90px;
+    gap: 10px;
+    padding: 12px 14px;
+    align-items: center;
+  }
+  .feed-row > :nth-child(2),
+  .feed-row > :nth-child(4){
+    display:none;
+  }
+  .feed-row > :nth-child(3){
+    justify-self: center;
+  }
+  .feed-row > :nth-child(5){
+    justify-self: end;
+  }
 
-  .feed-row > :nth-child(1) { grid-area: info; }
-  .feed-row > :nth-child(2) { grid-area: collateral; }
-  .feed-row > :nth-child(3) { grid-area: health; }
-  .feed-row > :nth-child(4) { display: none; } /* hide LIQ on mobile */
-  .feed-row > :nth-child(5) { grid-area: risk; justify-self: start; }
-
-  .fr-col, .fr-health { font-size: 13px; }
+  .fr-addr {
+    font-size: 11px;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
 
   .fr-info { gap: 10px; }
   .fr-addr {
@@ -427,19 +455,7 @@ body {
     word-break: break-word;
   }
 
-  /* Add labels so values aren't “mystery numbers” */
-  .fr-col::before,
-  .fr-health::before,
-  .badge::before {
-    display: block;
-    font-size: 9px;
-    letter-spacing: 0.18em;
-    color: var(--t3);
-    margin-bottom: 2px;
-  }
-  .fr-col::before { content: 'COLLATERAL'; }
-  .fr-health::before { content: 'HEALTH'; }
-  .badge::before { content: 'RISK'; }
+  /* keep wallet column compact */
 
   /* Pagination should not overflow */
   .pagination {
@@ -452,13 +468,14 @@ body {
   }
 
   /* Section 2: full width cards */
-  .checker-inner {
+  #sec-checker > div{
     max-width: 100%;
-    padding: 0;
+    padding: 0 16px;
   }
   .ck-card,
   .result-card {
-    padding: 18px;
+    width: 100%;
+    padding: 16px;
   }
 
   .stats-grid {
