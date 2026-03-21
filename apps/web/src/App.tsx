@@ -109,96 +109,108 @@ function DroppingLines() {
   return <canvas id="lines-canvas" ref={canvasRef} />
 }
 
-// --- Section 3: mini Monte Carlo canvas (ported 1:1) ---
-function MiniMonteCarlo({ ethPrice }: { ethPrice: number }) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  const [riskText, setRiskText] = useState<string>('— CASCADE RISK')
+// --- Section 3: replacement components ---
+function YieldRiskTable() {
+  const rows = [
+    { proto: 'Aave V3', apy: 4.8, risk: 'LOW', rec: 'Best baseline' },
+    { proto: 'Compound V3', apy: 5.4, risk: 'MED', rec: 'Good yield, watch HF' },
+    { proto: 'Morpho Blue', apy: 7.1, risk: 'HIGH', rec: 'Higher yield, higher liquidation risk' },
+  ]
 
-  const draw = useCallback(() => {
-    const mmc = canvasRef.current
-    if (!mmc) return
-    const mmx = mmc.getContext('2d')!
+  return (
+    <table className="proto-table" style={{ marginTop: 6 }}>
+      <tbody>
+        <tr>
+          <td style={{ color: 'var(--t3)', fontSize: 11, letterSpacing: '0.12em' }}>PROTOCOL</td>
+          <td style={{ color: 'var(--t3)', fontSize: 11, letterSpacing: '0.12em', textAlign: 'right' }}>APY</td>
+        </tr>
+        {rows.map((r) => (
+          <tr key={r.proto}>
+            <td>
+              <div style={{ fontWeight: 700, color: 'var(--t2)' }}>{r.proto}</div>
+              <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 4 }}>
+                Risk: {r.risk} · {r.rec}
+              </div>
+            </td>
+            <td style={{ textAlign: 'right', fontFamily: "'JetBrains Mono',monospace", fontWeight: 700, color: 'var(--t1)' }}>{r.apy.toFixed(1)}%</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
 
-    const rect = mmc.parentElement?.getBoundingClientRect()
-    if (!rect) return
-
-    mmc.width = rect.width - 44
-    mmc.height = 120
-
-    const W = mmc.width
-    const H = mmc.height
-
-    mmx.clearRect(0, 0, W, H)
-    mmx.fillStyle = 'rgba(0,0,0,0.25)'
-    mmx.fillRect(0, 0, W, H)
-
-    const p0 = ethPrice || 3200
-
-    const paths = Array.from({ length: 80 }, () => {
-      let p = p0
-      const path = [p]
-      const at = Math.floor(Math.random() * 10)
-      for (let t = 1; t <= 40; t++) {
-        const r = (Math.random() + Math.random() + Math.random() - 1.5) * Math.sqrt(1 / 3)
-        let ret = -0.0001 + 0.022 * r
-        if (t === at) ret += -0.1 * (0.4 + Math.random() * 0.8)
-        p = p * Math.exp(ret)
-        path.push(p)
-      }
-      return path
-    })
-
-    const all = paths.flat()
-    const mn = Math.min(...all) * 0.98
-    const mx2 = Math.max(...all) * 1.02
-
-    const steps = paths[0].length
-
-    const tx = (i: number) => (i / (steps - 1)) * (W - 10) + 5
-    const ty = (v: number) => H - ((v - mn) / (mx2 - mn)) * (H - 10) - 5
-
-    paths.forEach((path) => {
-      const fin = path[path.length - 1]
-      mmx.beginPath()
-      path.forEach((v, i) => {
-        const x = tx(i)
-        const y = ty(v)
-        if (i === 0) mmx.moveTo(x, y)
-        else mmx.lineTo(x, y)
-      })
-      mmx.strokeStyle = fin < p0 * 0.9 ? 'rgba(255,23,68,0.1)' : 'rgba(0,230,118,0.07)'
-      mmx.lineWidth = 0.9
-      mmx.stroke()
-    })
-
-    const lY = ty(p0 * 0.825)
-    mmx.beginPath()
-    mmx.moveTo(5, lY)
-    mmx.lineTo(W - 5, lY)
-    mmx.strokeStyle = 'rgba(255,23,68,0.55)'
-    mmx.lineWidth = 1
-    mmx.setLineDash([2, 3])
-    mmx.stroke()
-    mmx.setLineDash([])
-
-    const casc = ((paths.filter((p) => p[p.length - 1] < p0 * 0.825).length / paths.length) * 100).toFixed(1)
-    setRiskText(`${casc}% CASCADE RISK`)
-  }, [ethPrice])
+function SafePositionReadout({ PX }: { PX: Record<PriceSym, number> }) {
+  const [, force] = useState(0)
 
   useEffect(() => {
-    draw()
-    const t = setInterval(draw, 10000)
-    return () => clearInterval(t)
-  }, [draw])
+    const on = () => force((x) => x + 1)
+    window.addEventListener('sp:update', on)
+    return () => window.removeEventListener('sp:update', on)
+  }, [])
+
+  const asset = ((window as any).__sp_asset || 'ETH') as PriceSym
+  const amt = Number((window as any).__sp_amt || 0)
+  const debt = Number((window as any).__sp_debt || 0)
+
+  const price = Number(PX[asset] || 0)
+  const colUsd = amt * price
+
+  // Simple MVP assumptions: future drawdowns + target max LTV
+  const scenarios = [
+    { d: 7, drop: 0.1, maxLtv: 0.5 },
+    { d: 14, drop: 0.15, maxLtv: 0.45 },
+    { d: 30, drop: 0.25, maxLtv: 0.4 },
+  ]
+
+  const dangerPct = Math.max(0, Math.min(100, (debt && colUsd ? (debt / colUsd) * 100 : 0)))
+  const safePct = 50
 
   return (
     <>
-      <canvas id="mini-mc" ref={canvasRef} />
-      <div className="mc-foot">
-        <span>PYTH NETWORK LIVE FEEDS</span>
-        <span style={{ color: 'var(--red)' }} id="mc-risk">
-          {riskText}
-        </span>
+      <div className="stat-box" style={{ marginBottom: 12 }}>
+        <div className="sb-lbl">DANGER ZONE vs SAFE ZONE</div>
+        <div style={{ marginTop: 8 }}>
+          <div style={{ height: 10, borderRadius: 6, overflow: 'hidden', background: 'rgba(255,255,255,0.08)' }}>
+            <div style={{ width: `${safePct}%`, height: '100%', background: 'rgba(0,230,118,0.25)' }} />
+            <div style={{ width: `${Math.max(0, 100 - safePct)}%`, height: '100%', background: 'rgba(255,23,68,0.18)' }} />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--t3)', marginTop: 6 }}>
+            <span>SAFE ≤ {safePct}% LTV</span>
+            <span>Current: {dangerPct.toFixed(1)}%</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="stats-grid" style={{ gridTemplateColumns: '1fr', gap: 12, marginBottom: 0 }}>
+        {scenarios.map((s) => {
+          const futureCol = colUsd * (1 - s.drop)
+          const reqColForDebt = debt > 0 ? debt / s.maxLtv : 0
+          const more = debt > 0 ? Math.max(0, reqColForDebt - futureCol) : 0
+          return (
+            <div className="stat-box" key={s.d}>
+              <div className="sb-lbl">STAY SAFE FOR {s.d} DAYS</div>
+              <div className="sb-sub" style={{ marginTop: 6 }}>
+                Assumed drawdown: {(s.drop * 100).toFixed(0)}% · Target max LTV: {(s.maxLtv * 100).toFixed(0)}%
+              </div>
+              <div style={{ marginTop: 10, display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                <div>
+                  <div className="sb-lbl">COLLATERAL (NOW)</div>
+                  <div className="sb-val">{fmtUsd(colUsd || 0, 0)}</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div className="sb-lbl">DEPOSIT MORE</div>
+                  <div className="sb-val" style={{ color: more > 0 ? 'var(--orange)' : 'var(--green)' }}>
+                    {debt > 0 ? fmtUsd(more, 0) : '—'}
+                  </div>
+                </div>
+              </div>
+              <div className="sb-sub" style={{ marginTop: 8 }}>
+                {debt > 0 ? 'Based on your entered debt.' : 'Enter a debt amount to calculate required extra collateral.'}
+              </div>
+            </div>
+          )
+        })}
       </div>
     </>
   )
@@ -248,13 +260,6 @@ export default function App() {
     return allWallets.filter((w) => w.h < 1.3).reduce((s, w) => s + w.col, 0)
   }, [allWallets])
 
-  const pctBands = useMemo(() => {
-    const n = Math.max(1, allWallets.length)
-    const c = (allWallets.filter((w) => w.h < 1.05).length / n) * 100
-    const hi = (allWallets.filter((w) => w.h >= 1.05 && w.h < 1.15).length / n) * 100
-    const md = (allWallets.filter((w) => w.h >= 1.15 && w.h < 1.3).length / n) * 100
-    return { c, hi, md }
-  }, [allWallets])
 
   const atRiskStr = useMemo(() => '$' + Math.round((atRiskUsd / 1e6) * 10) / 10 + 'M', [atRiskUsd])
 
@@ -738,94 +743,75 @@ export default function App() {
           </div>
         </div>
 
-        {/* SECTION 3 */}
+        {/* SECTION 3 (REPLACED) */}
         <div className="section" id="sec-stats">
           <div className="sec-eyebrow">
             <span />SECTION 03<span />
           </div>
           <div className="sec-title">
-            Market <em style={{ color: 'var(--orange)' }}>Risk Stats</em>
+            Safe <em style={{ color: 'var(--orange)' }}>Builder</em>
           </div>
 
-          <div className="stats-row">
-            <div className="card b-card" style={{ ['--c-top' as any]: 'linear-gradient(90deg,var(--red),var(--orange))' }}>
-              <div className="bc-h">TOTAL AT RISK</div>
-              <div className="bc-s">Near-liquidation positions across protocols</div>
-              <div className="big-num" style={{ color: 'var(--red)' }} id="b-atrisk">
-                {atRiskStr}
-              </div>
-              <div className="big-sub">in danger zone right now</div>
-
-              <div className="rbar">
-                <div className="rbar-top">
-                  <span style={{ color: 'var(--red)' }}>CRITICAL &lt;1.05</span>
-                  <span className="rbar-pct" id="pct-c">
-                    {pctBands.c.toFixed(1)}%
-                  </span>
-                </div>
-                <div className="rbar-track">
-                  <div className="rbar-fill" id="rb-c" style={{ width: `${pctBands.c}%`, background: 'var(--red)' }} />
-                </div>
-              </div>
-
-              <div className="rbar">
-                <div className="rbar-top">
-                  <span style={{ color: 'var(--orange)' }}>HIGH &lt;1.15</span>
-                  <span className="rbar-pct" id="pct-h">
-                    {pctBands.hi.toFixed(1)}%
-                  </span>
-                </div>
-                <div className="rbar-track">
-                  <div className="rbar-fill" id="rb-h" style={{ width: `${pctBands.hi}%`, background: 'var(--orange)' }} />
-                </div>
-              </div>
-
-              <div className="rbar">
-                <div className="rbar-top">
-                  <span style={{ color: 'var(--yellow)' }}>MEDIUM &lt;1.3</span>
-                  <span className="rbar-pct" id="pct-m">
-                    {pctBands.md.toFixed(1)}%
-                  </span>
-                </div>
-                <div className="rbar-track">
-                  <div className="rbar-fill" id="rb-m" style={{ width: `${pctBands.md}%`, background: 'var(--yellow)' }} />
-                </div>
-              </div>
-            </div>
-
-            <div className="card b-card" style={{ ['--c-top' as any]: 'linear-gradient(90deg,var(--blue),var(--cyan))' }}>
-              <div className="bc-h">MONTE CARLO</div>
-              <div className="bc-s">1,000 simulated ETH price paths via Pyth</div>
-              <MiniMonteCarlo ethPrice={PX.ETH} />
-            </div>
-
+          <div className="stats-row" style={{ gridTemplateColumns: '1fr 1fr', alignItems: 'start' }}>
+            {/* A) SAFE POSITION BUILDER */}
             <div className="card b-card" style={{ ['--c-top' as any]: 'linear-gradient(90deg,var(--teal),var(--green))' }}>
-              <div className="bc-h">PROTOCOL BREAKDOWN</div>
-              <div className="bc-s">At-risk collateral by lending protocol</div>
-              <table className="proto-table">
-                <tbody>
-                  <tr>
-                    <td>Aave V3</td>
-                    <td style={{ color: 'var(--red)' }}>$340M</td>
-                  </tr>
-                  <tr>
-                    <td>Compound V3</td>
-                    <td style={{ color: 'var(--orange)' }}>$180M</td>
-                  </tr>
-                  <tr>
-                    <td>Morpho Blue</td>
-                    <td style={{ color: 'var(--yellow)' }}>$95M</td>
-                  </tr>
-                  <tr>
-                    <td>Others</td>
-                    <td style={{ color: 'var(--t2)' }}>$62M</td>
-                  </tr>
-                  <tr className="proto-total">
-                    <td>TOTAL AT RISK</td>
-                    <td style={{ color: 'var(--red)' }}>$677M</td>
-                  </tr>
-                </tbody>
-              </table>
+              <div className="bc-h">SAFE POSITION BUILDER</div>
+              <div className="bc-s">Quick safety buffer estimates (MVP)</div>
+
+              <div className="stats-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 12 }}>
+                <div className="stat-box">
+                  <div className="sb-lbl">COLLATERAL ASSET</div>
+                  <select
+                    className="w-select"
+                    value={(window as any).__sp_asset || 'ETH'}
+                    onChange={(e) => {
+                      ;(window as any).__sp_asset = e.target.value
+                      window.dispatchEvent(new Event('sp:update'))
+                    }}
+                    style={{ marginBottom: 0 }}
+                  >
+                    <option value="ETH">ETH</option>
+                    <option value="BTC">BTC</option>
+                    <option value="SOL">SOL</option>
+                  </select>
+                </div>
+                <div className="stat-box">
+                  <div className="sb-lbl">COLLATERAL AMOUNT</div>
+                  <input
+                    className="w-input"
+                    placeholder="e.g. 2.5"
+                    defaultValue={(window as any).__sp_amt || ''}
+                    onChange={(e) => {
+                      ;(window as any).__sp_amt = e.target.value
+                      window.dispatchEvent(new Event('sp:update'))
+                    }}
+                    style={{ marginBottom: 0 }}
+                  />
+                </div>
+              </div>
+
+              <div className="stat-box" style={{ marginBottom: 12 }}>
+                <div className="sb-lbl">CURRENT DEBT (USD) (OPTIONAL)</div>
+                <input
+                  className="w-input"
+                  placeholder="e.g. 1500"
+                  defaultValue={(window as any).__sp_debt || ''}
+                  onChange={(e) => {
+                    ;(window as any).__sp_debt = e.target.value
+                    window.dispatchEvent(new Event('sp:update'))
+                  }}
+                  style={{ marginBottom: 0 }}
+                />
+              </div>
+
+              <SafePositionReadout PX={PX} />
+            </div>
+
+            {/* B) YIELD VS RISK */}
+            <div className="card b-card" style={{ ['--c-top' as any]: 'linear-gradient(90deg,var(--blue),var(--cyan))' }}>
+              <div className="bc-h">YIELD VS RISK COMPARISON</div>
+              <div className="bc-s">Rates: approximate for MVP</div>
+              <YieldRiskTable />
             </div>
           </div>
         </div>

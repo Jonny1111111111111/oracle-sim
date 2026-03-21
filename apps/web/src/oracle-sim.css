@@ -13,9 +13,9 @@
 html,body,#root{height:100%;overflow:hidden;}
 
 body {
-  background:#ffffff;
+  background:#0a0f1e;
   font-family:'Space Grotesk',sans-serif;
-  color:#1a1f3a;
+  color:var(--t1);
 }
 
 /* ── DROPPING LINES ── */
@@ -35,8 +35,11 @@ body {
 .logo {
   display:flex; align-items:center; gap:10px;
   font-family:'Unbounded',sans-serif;
-  font-size:18px; font-weight:900; color:var(--navy);
+  font-size:18px; font-weight:900; color:var(--t1);
 }
+
+/* keep topbar readable on dark background */
+.topbar{ background:rgba(10,15,30,0.92); border-bottom:1.5px solid rgba(255,255,255,0.08); }
 .logo-icon {
   width:36px; height:36px; border-radius:9px;
   background:linear-gradient(135deg,#0a0e23,#1a2550);
@@ -101,14 +104,14 @@ body {
 /* section labels */
 .sec-eyebrow {
   font-size:9px; font-weight:700; letter-spacing:0.25em;
-  color:rgba(0,0,0,0.3); margin-bottom:6px; text-transform:uppercase;
+  color:rgba(255,255,255,0.35); margin-bottom:6px; text-transform:uppercase;
   display:flex; align-items:center; gap:8px;
 }
-.sec-eyebrow span{display:inline-block;width:20px;height:1px;background:rgba(0,0,0,0.2);}
+.sec-eyebrow span{display:inline-block;width:20px;height:1px;background:rgba(255,255,255,0.18);}
 .sec-title {
   font-family:'Unbounded',sans-serif;
   font-size:clamp(20px,3.5vw,32px); font-weight:900;
-  color:var(--navy); margin-bottom:20px; line-height:1.15;
+  color:var(--t1); margin-bottom:20px; line-height:1.15;
 }
 .sec-title em{font-style:normal;}
 
@@ -389,7 +392,7 @@ body {
     top: auto; bottom: auto; left: auto; right: auto;
     height: auto !important;
     overflow-y: visible !important;
-    -webkit-overflow-scrolling: auto;
+    -webkit-overflow-scrolling: touch;
     scroll-snap-type: none !important;
     scroll-snap-stop: normal;
     scroll-behavior: auto;
