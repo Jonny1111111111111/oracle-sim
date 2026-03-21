@@ -20,7 +20,7 @@ html,body,#root{height:100%;overflow:hidden;}
 }
 
 body {
-  background:#fafaf8;
+  background:#e8f4ff;
   font-family:'Space Grotesk',sans-serif;
   color:var(--t1);
 }
@@ -45,8 +45,8 @@ body {
   font-size:18px; font-weight:900; color:var(--t1);
 }
 
-/* Topbar on warm cream background */
-.topbar{ background:rgba(250,250,248,0.92); border-bottom:1.5px solid rgba(10,14,35,0.10); }
+/* Topbar on light blue background */
+.topbar{ background:rgba(232,244,255,0.92); border-bottom:1.5px solid rgba(10,14,35,0.10); }
 .logo{ color:#0a0e23; }
 .logo-icon {
   width:36px; height:36px; border-radius:9px;
@@ -361,7 +361,7 @@ body {
   /* keep clicks reliable over animated background */
   padding: 10px 14px;
   border-radius: 999px;
-  background: rgba(250, 250, 248, 0.70);
+  background: rgba(232, 244, 255, 0.72);
   backdrop-filter: blur(12px);
   border: 1px solid rgba(10, 14, 35, 0.10);
 }
@@ -398,21 +398,29 @@ body {
   padding-top:18px;
 }
 .os-footer-inner{
-  background:rgba(250,250,248,0.72);
+  background:rgba(255,255,255,0.70);
   border:1px solid rgba(10,14,35,0.10);
   border-radius:14px;
   padding:18px 18px;
   backdrop-filter:blur(14px);
   display:flex;
   flex-direction:column;
-  gap:10px;
+  gap:12px;
+
+  /* make it feel like a proper page footer block */
+  max-width: 1200px;
+  margin: 0 auto;
 }
 .os-footer-top{
+  display:grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap:18px;
+  align-items:start;
+}
+.os-footer-brand{
   display:flex;
-  align-items:flex-start;
-  justify-content:space-between;
-  gap:14px;
-  flex-wrap:wrap;
+  flex-direction:column;
+  gap:8px;
 }
 .os-footer-logo{
   font-family:'Unbounded',sans-serif;
@@ -422,13 +430,14 @@ body {
 }
 .os-footer-tag{font-size:12px;color:rgba(10,14,35,0.62);font-weight:600;}
 .os-footer-links{
-  display:flex;
-  flex-wrap:wrap;
+  display:grid;
+  grid-template-columns: 1fr 1fr;
   gap:10px 14px;
   font-size:12px;
   font-weight:700;
+  align-content:start;
 }
-.os-footer-links a{color:#0a0e23;text-decoration:none;border-bottom:1px solid rgba(10,14,35,0.22);}
+.os-footer-links a{color:#0a0e23;text-decoration:none;border-bottom:1px solid rgba(10,14,35,0.22);width:fit-content;}
 .os-footer-links a:hover{border-bottom-color:rgba(10,14,35,0.55);}
 .os-footer-bottom{
   display:flex;
@@ -437,6 +446,8 @@ body {
   flex-wrap:wrap;
   font-size:11px;
   color:rgba(10,14,35,0.62);
+  border-top:1px solid rgba(10,14,35,0.10);
+  padding-top:12px;
 }
 
 @media (max-width: 480px) {
@@ -447,6 +458,10 @@ body {
     max-width:none;
     padding:0 16px;
   }
+
+  .os-footer-inner{padding:16px;}
+  .os-footer-top{grid-template-columns:1fr;}
+  .os-footer-links{grid-template-columns:1fr;}
   .scroll-wrap {
     position: static !important;
     top: auto; bottom: auto; left: auto; right: auto;

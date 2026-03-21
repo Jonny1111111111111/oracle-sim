@@ -819,19 +819,25 @@ export default function App() {
           <div className="os-footer">
             <div className="os-footer-inner">
               <div className="os-footer-top">
-                <div>
+                <div className="os-footer-brand">
                   <div className="os-footer-logo">ORACLE SIM</div>
                   <div className="os-footer-tag">Powered by Pyth Network</div>
+                  <div className="os-footer-tag" style={{ maxWidth: 420 }}>
+                    Real-time liquidation radar + wallet health checks.
+                  </div>
                 </div>
+
                 <div className="os-footer-links">
-                  <a href="https://x.com/oraclesim" target="_blank" rel="noreferrer">Twitter/X: @oraclesim</a>
-                  <a href="https://t.me/oraclesim" target="_blank" rel="noreferrer">Telegram: t.me/oraclesim</a>
-                  <a href="https://discord.gg/oraclesim" target="_blank" rel="noreferrer">Discord: discord.gg/oraclesim</a>
-                  <a href="mailto:hello@oraclesim.xyz">Email: hello@oraclesim.xyz</a>
+                  <a href="https://x.com/oraclesim" target="_blank" rel="noreferrer">Twitter/X · @oraclesim</a>
+                  <a href="https://t.me/oraclesim" target="_blank" rel="noreferrer">Telegram · t.me/oraclesim</a>
+                  <a href="https://discord.gg/oraclesim" target="_blank" rel="noreferrer">Discord · discord.gg/oraclesim</a>
+                  <a href="mailto:hello@oraclesim.xyz">Email · hello@oraclesim.xyz</a>
                 </div>
               </div>
+
               <div className="os-footer-bottom">
                 <span>© 2026 Oracle Sim. All rights reserved.</span>
+                <span style={{ fontFamily: "'JetBrains Mono',monospace" }}>hello@oraclesim.xyz</span>
               </div>
             </div>
           </div>
