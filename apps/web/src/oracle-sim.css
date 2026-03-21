@@ -413,7 +413,9 @@ body {
   .feed-rows-wrap { padding-bottom: 12px; }
 
   /* Tighter section padding */
-  .section { padding: 16px; }
+  .section { padding: 12px; }
+  .sec-title { margin-bottom: 12px; }
+  .radar-grid { gap: 12px; }
 
   /* Section 1: radar becomes single column grid */
   .radar-grid {

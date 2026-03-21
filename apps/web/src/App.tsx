@@ -218,10 +218,6 @@ export default function App() {
   const [page, setPage] = useState(1)
   const PER_PAGE = 10
 
-  // Quick checker
-  const [quickAddr, setQuickAddr] = useState('')
-  const [quickResult, setQuickResult] = useState<{ score: number; colorVar: string; status: string } | null>(null)
-
   // Full checker
   const [checkAddr, setCheckAddr] = useState('')
   const [result, setResult] = useState<null | {
@@ -366,26 +362,6 @@ export default function App() {
     return () => clearInterval(t)
   }, [rebuildWallets])
 
-  const doCheckQuick = useCallback(async () => {
-    const addr = (quickAddr || '').trim()
-    if (!addr) return
-
-    try {
-      const r = await fetch(`${API}/aave/wallet/${addr}`)
-      const d = await r.json()
-      const hf = Number(d?.computed?.healthFactor)
-      const score = Number(d?.computed?.riskScore)
-
-      if (!Number.isFinite(hf) || !Number.isFinite(score)) throw new Error('bad_response')
-
-      const colorVar = hf < 1.05 ? 'var(--red)' : hf < 1.15 ? 'var(--orange)' : hf < 1.3 ? 'var(--yellow)' : 'var(--green)'
-      const status = hf < 1.05 ? '⚠ CRITICAL' : hf < 1.15 ? '⚡ HIGH RISK' : hf < 1.3 ? 'ELEVATED' : '✓ HEALTHY'
-      setQuickResult({ score, colorVar, status })
-    } catch {
-      setQuickResult({ score: 0, colorVar: 'var(--t3)', status: 'API ERROR' })
-    }
-  }, [API, quickAddr])
-
   const doCheck = useCallback(async () => {
     const addr = (checkAddr || '').trim()
     if (!addr) return
@@ -464,13 +440,6 @@ export default function App() {
       })
     }
   }, [API, checkAddr])
-
-  const onQuickKey = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === 'Enter') doCheckQuick()
-    },
-    [doCheckQuick],
-  )
 
   const onFullKey = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -624,57 +593,9 @@ export default function App() {
               </div>
             </div>
 
-            {/* Mini checker preview */}
+            {/* Sidebar */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minHeight: 0 }}>
-              <div className="card" style={{ ['--c-top' as any]: 'linear-gradient(90deg,var(--cyan),var(--teal))', padding: 18, flex: 1 }}>
-                <div
-                  style={{
-                    fontFamily: "'Unbounded',sans-serif",
-                    fontSize: 12,
-                    fontWeight: 900,
-                    color: 'var(--t1)',
-                    marginBottom: 6,
-                  }}
-                >
-                  QUICK CHECK
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--t3)', marginBottom: 14 }}>Enter wallet for instant risk score</div>
-                <input
-                  className="w-input"
-                  id="w-input-quick"
-                  placeholder="0x... wallet address"
-                  style={{ marginBottom: 10 }}
-                  value={quickAddr}
-                  onChange={(e) => setQuickAddr(e.target.value)}
-                  onKeyDown={onQuickKey}
-                />
-                <button className="analyze-btn" onClick={doCheckQuick} style={{ padding: 11 }}>
-                  ⚡ ANALYZE
-                </button>
-
-                <div id="quick-result" style={{ marginTop: 12, display: quickResult ? 'block' : 'none' }}>
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: 9, letterSpacing: '0.2em', color: 'var(--t3)', marginBottom: 4 }}>HEALTH SCORE</div>
-                    <div
-                      id="qr-score"
-                      style={{
-                        fontFamily: "'Unbounded',sans-serif",
-                        fontSize: 56,
-                        fontWeight: 900,
-                        lineHeight: 1,
-                        color: quickResult?.colorVar,
-                      }}
-                    >
-                      {quickResult ? quickResult.score.toFixed(0) : ''}
-                    </div>
-                    <div id="qr-status" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', marginTop: 4, color: quickResult?.colorVar }}>
-                      {quickResult?.status}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="card" style={{ ['--c-top' as any]: 'linear-gradient(90deg,var(--purple),var(--blue))', padding: 18 }}>
+              <div className="card" style={{ ['--c-top' as any]: 'linear-gradient(90deg,var(--purple),var(--blue))', padding: 18, flex: 1 }}>
                 <div style={{ fontSize: 9, letterSpacing: '0.2em', color: 'var(--t3)', marginBottom: 10 }}>PROTOCOL STATS</div>
                 <div style={{ fontSize: 11, color: 'var(--t2)', lineHeight: 2.2 }}>
                   Total collateral: <span style={{ color: 'var(--t1)', fontFamily: "'JetBrains Mono',monospace" }}>$2.4B</span>
@@ -799,6 +720,21 @@ export default function App() {
                 {result?.alertText || '—'}
               </div>
             </div>
+
+            {result ? (
+              <button
+                className="analyze-btn"
+                style={{ marginTop: 12 }}
+                onClick={() => {
+                  setResult(null)
+                  setCheckAddr('')
+                  // try to bring focus back to the input
+                  setTimeout(() => document.getElementById('w-input')?.focus(), 0)
+                }}
+              >
+                CHECK ANOTHER WALLET
+              </button>
+            ) : null}
           </div>
         </div>
 
